@@ -239,7 +239,7 @@ const Kitchen = () => {
 
                 <ScrollArea className="flex-1 max-h-48">
                   <CardContent className="pt-0 space-y-2">
-                    {order.items?.map((item) => (
+                    {order.order_items?.map((item) => (
                       <div
                         key={item.id}
                         className="flex items-start gap-2 p-2 rounded bg-muted/50"

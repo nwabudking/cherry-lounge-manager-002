@@ -140,7 +140,7 @@ const Dashboard = () => {
     { name: string; quantity: number; revenue: number }
   > = {};
   todayOrders.forEach((order) => {
-    order.items?.forEach((item) => {
+    order.order_items?.forEach((item) => {
       if (!itemSales[item.item_name]) {
         itemSales[item.item_name] = { name: item.item_name, quantity: 0, revenue: 0 };
       }

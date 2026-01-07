@@ -118,13 +118,16 @@ const Inventory = () => {
           },
         }
       );
-    } else {
-      createItemMutation.mutate(data, {
-        onSuccess: () => {
-          setIsItemDialogOpen(false);
-          setSelectedItem(null);
-        },
-      });
+    } else if (data.name) {
+      createItemMutation.mutate(
+        { ...data, name: data.name } as { name: string } & Partial<InventoryItem>,
+        {
+          onSuccess: () => {
+            setIsItemDialogOpen(false);
+            setSelectedItem(null);
+          },
+        }
+      );
     }
   };
 
@@ -154,13 +157,16 @@ const Inventory = () => {
           },
         }
       );
-    } else {
-      createSupplierMutation.mutate(data, {
-        onSuccess: () => {
-          setIsSupplierDialogOpen(false);
-          setSelectedSupplier(null);
-        },
-      });
+    } else if (data.name) {
+      createSupplierMutation.mutate(
+        { ...data, name: data.name } as { name: string } & Partial<Supplier>,
+        {
+          onSuccess: () => {
+            setIsSupplierDialogOpen(false);
+            setSelectedSupplier(null);
+          },
+        }
+      );
     }
   };
 

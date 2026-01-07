@@ -161,17 +161,46 @@ export function useUpdateStaffRole() {
   });
 }
 
-// Note: Creating and deleting staff requires admin functions since it involves auth.users
-// These would need to be handled via Edge Functions for security
+// Note: Creating staff requires calling an edge function
+export function useCreateStaff() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (data: { email: string; password: string; full_name: string; role: string }) => {
+      // Call the manage-staff edge function
+      const { data: result, error } = await supabase.functions.invoke('manage-staff', {
+        body: { action: 'create', ...data },
+      });
+      
+      if (error) throw error;
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: staffKeys.all });
+      toast.success('Staff member created successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to create staff member');
+    },
+  });
+}
+
 export function useDeleteStaff() {
   const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async (id: string) => {
-      // This would typically call an edge function to delete the user
-      // For now, just mark as inactive or delete profile
-      toast.info('Staff deletion requires admin privileges');
-      throw new Error('Staff deletion must be done through admin panel');
+      // Call the manage-staff edge function
+      const { data: result, error } = await supabase.functions.invoke('manage-staff', {
+        body: { action: 'delete', user_id: id },
+      });
+      
+      if (error) throw error;
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: staffKeys.all });
+      toast.success('Staff member deleted successfully');
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to delete staff member');
