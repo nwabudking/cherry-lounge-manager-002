@@ -6,6 +6,7 @@ import {
   useUpdateStaff,
   useUpdateStaffRole,
   useDeleteStaff,
+  useCreateStaff,
 } from "@/hooks/useStaff";
 import { StaffHeader } from "@/components/staff/StaffHeader";
 import { StaffTable } from "@/components/staff/StaffTable";
@@ -33,6 +34,7 @@ const Staff = () => {
   const [roleFilter, setRoleFilter] = useState<string>("all");
 
   const { data: staffMembers = [], isLoading } = useStaff();
+  const createStaffMutation = useCreateStaff();
   const updateStaffMutation = useUpdateStaff();
   const updateRoleMutation = useUpdateStaffRole();
   const deleteStaffMutation = useDeleteStaff();

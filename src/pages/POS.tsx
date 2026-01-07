@@ -85,32 +85,20 @@ const POS = () => {
         setCart([]);
         setTableNumber("");
         setIsCheckoutOpen(false);
+        queryClient.invalidateQueries({ queryKey: ["orders"] });
+        queryClient.invalidateQueries({ queryKey: ["menu"] });
+        queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      },
+      onError: (error: Error) => {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to create order. Please try again.",
+          variant: "destructive",
+        });
+        console.error(error);
       },
     });
   };
-    },
-    onSuccess: (order) => {
-      toast({
-        title: "Order Created!",
-        description: `Order ${order.order_number} has been placed successfully.`,
-      });
-      setCheckoutCart([...cart]);
-      setCompletedOrder(order);
-      setCart([]);
-      setTableNumber("");
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
-      queryClient.invalidateQueries({ queryKey: ["menu"] });
-      queryClient.invalidateQueries({ queryKey: ["inventory"] });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create order. Please try again.",
-        variant: "destructive",
-      });
-      console.error(error);
-    },
-  });
 
   const addToCart = (item: { id: string; name: string; price: number }) => {
     setCart((prev) => {
@@ -211,7 +199,7 @@ const POS = () => {
         cart={completedOrder ? checkoutCart : cart}
         orderType={orderType}
         tableNumber={tableNumber}
-        onConfirmPayment={(method) => createOrderMutation.mutate(method)}
+        onConfirmPayment={handleCheckout}
         isProcessing={createOrderMutation.isPending}
         completedOrder={completedOrder}
         onClose={handleCloseCheckout}
