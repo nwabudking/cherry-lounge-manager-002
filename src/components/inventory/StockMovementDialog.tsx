@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,14 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { ArrowUp, ArrowDown, RefreshCw } from "lucide-react";
+import { ArrowUp, ArrowDown, RefreshCw, TrendingUp } from "lucide-react";
 import type { InventoryItem, MovementType } from "@/types/inventory";
 
 interface StockMovementDialogProps {
   item: InventoryItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (type: MovementType, quantity: number, notes?: string) => void;
+  onSubmit: (type: MovementType, quantity: number, notes?: string, costPrice?: number, sellingPrice?: number) => void;
   isSubmitting: boolean;
 }
 
@@ -32,13 +32,23 @@ export const StockMovementDialog = ({
   const [type, setType] = useState<MovementType>("in");
   const [quantity, setQuantity] = useState<number>(0);
   const [notes, setNotes] = useState("");
+  const [costPrice, setCostPrice] = useState<number | undefined>(undefined);
+  const [sellingPrice, setSellingPrice] = useState<number | undefined>(undefined);
+
+  // Initialize prices from item when dialog opens
+  useEffect(() => {
+    if (item && open) {
+      setCostPrice(item.cost_per_unit || undefined);
+      setSellingPrice(item.selling_price || undefined);
+    }
+  }, [item, open]);
 
   if (!item) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (quantity > 0) {
-      onSubmit(type, quantity, notes || undefined);
+      onSubmit(type, quantity, notes || undefined, costPrice, sellingPrice);
     }
   };
 
@@ -48,9 +58,18 @@ export const StockMovementDialog = ({
     return quantity;
   };
 
+  const formatPrice = (price: number | null | undefined) => {
+    if (price === null || price === undefined) return "Not set";
+    return new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
+      minimumFractionDigits: 0,
+    }).format(price);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Stock Movement</DialogTitle>
           <DialogDescription>
@@ -133,6 +152,53 @@ export const StockMovementDialog = ({
               required
             />
           </div>
+
+          {/* Price update section - only for stock in */}
+          {type === "in" && (
+            <div className="space-y-4 p-4 rounded-lg border border-primary/20 bg-primary/5">
+              <div className="flex items-center gap-2 text-primary">
+                <TrendingUp className="h-4 w-4" />
+                <Label className="font-semibold">Price Update (Optional)</Label>
+              </div>
+              
+              <div className="text-xs text-muted-foreground mb-2">
+                Previous prices: Cost {formatPrice(item.cost_per_unit)} | Selling {formatPrice(item.selling_price)}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="costPrice">Cost Price</Label>
+                  <Input
+                    id="costPrice"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={costPrice ?? ""}
+                    onChange={(e) => setCostPrice(e.target.value ? Number(e.target.value) : undefined)}
+                    placeholder="Enter cost"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sellingPrice">Selling Price</Label>
+                  <Input
+                    id="sellingPrice"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={sellingPrice ?? ""}
+                    onChange={(e) => setSellingPrice(e.target.value ? Number(e.target.value) : undefined)}
+                    placeholder="Enter selling"
+                  />
+                </div>
+              </div>
+
+              {costPrice && sellingPrice && sellingPrice > costPrice && (
+                <div className="text-xs text-emerald-500">
+                  Profit margin: {formatPrice(sellingPrice - costPrice)} ({((sellingPrice - costPrice) / costPrice * 100).toFixed(1)}%)
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="notes">Notes (Optional)</Label>

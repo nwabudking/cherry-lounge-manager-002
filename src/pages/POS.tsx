@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBarContext } from "@/contexts/BarContext";
@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useActiveMenuCategories } from "@/hooks/useMenu";
 import { useMenuItemsWithInventory, useBarInventoryStock, getMenuItemStockInfo, validateCartStock } from "@/hooks/useBarStock";
 import { useCreateOrder, CreateOrderData } from "@/hooks/useOrders";
+import { useCashierAssignment } from "@/hooks/useCashierAssignment";
 import { POSHeader } from "@/components/pos/POSHeader";
 import { CategoryTabs } from "@/components/pos/CategoryTabs";
 import { MenuGrid } from "@/components/pos/MenuGrid";
@@ -13,8 +14,12 @@ import { CartPanel } from "@/components/pos/CartPanel";
 import { CheckoutDialog } from "@/components/pos/CheckoutDialog";
 import { BarSelector } from "@/components/pos/BarSelector";
 import { StockWarningAlert } from "@/components/pos/StockWarningAlert";
+import { HeldOrdersPanel, HeldOrder } from "@/components/pos/HeldOrdersPanel";
+import { CashierRestrictionAlert } from "@/components/pos/CashierRestrictionAlert";
 import type { MenuCategory } from "@/hooks/useMenu";
 import type { MenuItemStockInfo } from "@/hooks/useBarStock";
+import { Button } from "@/components/ui/button";
+import { Pause } from "lucide-react";
 
 export interface CartItem {
   id: string;
@@ -36,7 +41,7 @@ interface CompletedOrder {
 
 const POS = () => {
   const { user, role } = useAuth();
-  const { activeBar } = useBarContext();
+  const { activeBar, setActiveBar, bars } = useBarContext();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -48,15 +53,34 @@ const POS = () => {
   const [tableNumber, setTableNumber] = useState("");
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<CompletedOrder | null>(null);
+  const [heldOrders, setHeldOrders] = useState<HeldOrder[]>([]);
 
   const { data: categories = [] } = useActiveMenuCategories();
   const { data: menuItems = [] } = useMenuItemsWithInventory(selectedCategory || undefined);
   const { data: barStockMap } = useBarInventoryStock(activeBar?.id || null);
-
+  
+  // Check cashier assignment
+  const { data: cashierAssignment, isLoading: isLoadingAssignment } = useCashierAssignment(user?.id || "");
+  
   const createOrderMutation = useCreateOrder();
 
   // Check if user can reprint (only admins/managers)
   const canReprint = role === "super_admin" || role === "manager";
+  
+  // Check if user needs bar assignment (only cashiers need assignment)
+  const isCashier = role === "cashier";
+  const isAssignedToBar = !!cashierAssignment;
+  const canAccessPOS = !isCashier || isAssignedToBar || role === "super_admin" || role === "manager" || role === "bar_staff";
+
+  // Auto-set active bar for cashiers based on their assignment
+  useEffect(() => {
+    if (cashierAssignment && cashierAssignment.bar) {
+      const assignedBar = bars.find(b => b.id === cashierAssignment.bar_id);
+      if (assignedBar && activeBar?.id !== assignedBar.id) {
+        setActiveBar(assignedBar);
+      }
+    }
+  }, [cashierAssignment, bars, activeBar, setActiveBar]);
 
   // Calculate stock info for each menu item
   const stockInfoMap = useMemo(() => {
@@ -243,6 +267,65 @@ const POS = () => {
 
   const clearCart = () => setCart([]);
 
+  // Hold order function
+  const holdCurrentOrder = () => {
+    if (cart.length === 0) {
+      toast({
+        title: "Empty Cart",
+        description: "Add items to hold an order.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const heldOrder: HeldOrder = {
+      id: crypto.randomUUID(),
+      items: [...cart],
+      orderType,
+      tableNumber: tableNumber || undefined,
+      holdTime: new Date(),
+    };
+
+    setHeldOrders(prev => [...prev, heldOrder]);
+    setCart([]);
+    setTableNumber("");
+    toast({
+      title: "Order Held",
+      description: "Order has been put on hold. You can resume it later.",
+    });
+  };
+
+  const resumeHeldOrder = (order: HeldOrder) => {
+    // If cart has items, hold them first
+    if (cart.length > 0) {
+      const currentHeldOrder: HeldOrder = {
+        id: crypto.randomUUID(),
+        items: [...cart],
+        orderType,
+        tableNumber: tableNumber || undefined,
+        holdTime: new Date(),
+      };
+      setHeldOrders(prev => [...prev, currentHeldOrder]);
+    }
+
+    setCart(order.items);
+    setOrderType(order.orderType as OrderType);
+    setTableNumber(order.tableNumber || "");
+    setHeldOrders(prev => prev.filter(o => o.id !== order.id));
+    toast({
+      title: "Order Resumed",
+      description: "Held order has been loaded to cart.",
+    });
+  };
+
+  const deleteHeldOrder = (orderId: string) => {
+    setHeldOrders(prev => prev.filter(o => o.id !== orderId));
+    toast({
+      title: "Order Removed",
+      description: "Held order has been deleted.",
+    });
+  };
+
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const total = subtotal;
 
@@ -267,6 +350,20 @@ const POS = () => {
   // Show warning if no bar selected and items need tracking
   const noBarSelected = !activeBar && menuItems.some(m => m.track_inventory);
 
+  // Show loading while checking assignment
+  if (isLoadingAssignment) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  // Show restriction if cashier not assigned
+  if (!canAccessPOS) {
+    return <CashierRestrictionAlert userName={user?.email?.split('@')[0]} />;
+  }
+
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
       {/* Left Panel - Menu */}
@@ -277,13 +374,37 @@ const POS = () => {
           tableNumber={tableNumber}
           setTableNumber={setTableNumber}
         >
-          <BarSelector />
+          <div className="flex items-center gap-2">
+            <BarSelector />
+            {cart.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={holdCurrentOrder}
+                className="gap-1"
+              >
+                <Pause className="h-4 w-4" />
+                Hold
+              </Button>
+            )}
+          </div>
         </POSHeader>
 
         {noBarSelected && (
           <div className="px-4 pt-4">
             <StockWarningAlert 
               insufficientItems={[{ name: "No bar selected", available: 0, requested: 0 }]} 
+            />
+          </div>
+        )}
+
+        {/* Held Orders Panel */}
+        {heldOrders.length > 0 && (
+          <div className="px-4 pt-4">
+            <HeldOrdersPanel
+              heldOrders={heldOrders}
+              onResumeOrder={resumeHeldOrder}
+              onDeleteHeldOrder={deleteHeldOrder}
             />
           </div>
         )}
@@ -330,6 +451,7 @@ const POS = () => {
         onClose={handleCloseCheckout}
         canReprint={canReprint}
         insufficientStock={stockValidation.insufficientItems}
+        barName={activeBar?.name}
       />
     </div>
   );

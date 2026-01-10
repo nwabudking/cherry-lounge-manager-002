@@ -6,6 +6,7 @@ export interface InventoryItem {
   current_stock: number;
   min_stock_level: number;
   cost_per_unit: number | null;
+  selling_price: number | null;
   supplier: string | null;
   supplier_id: string | null;
   is_active: boolean | null;

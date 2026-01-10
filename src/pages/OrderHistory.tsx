@@ -1,8 +1,9 @@
 import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, startOfDay, endOfDay, isWithinInterval } from "date-fns";
-import { Search, Printer, Eye, History, CalendarIcon, X } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { format, startOfDay, endOfDay } from "date-fns";
+import { Search, Printer, Eye, History, CalendarIcon, X, Store } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useBars } from "@/hooks/useBars";
 
 const formatPrice = (price: number) => {
   return new Intl.NumberFormat("en-NG", {
@@ -84,18 +86,25 @@ interface Order {
   subtotal: number;
   total_amount: number;
   created_at: string;
+  bar_id: string | null;
   order_items: OrderItem[];
   payments: { payment_method: string }[];
 }
 
 const OrderHistory = () => {
+  const { role } = useAuth();
+  const isAdmin = role === "super_admin" || role === "manager";
+
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [barFilter, setBarFilter] = useState("all");
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showReceiptDialog, setShowReceiptDialog] = useState(false);
   const receiptRef = useRef<HTMLDivElement>(null);
+
+  const { data: bars = [] } = useBars();
 
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["order-history"],
@@ -115,6 +124,12 @@ const OrderHistory = () => {
     },
   });
 
+  const getBarName = (barId: string | null) => {
+    if (!barId) return "N/A";
+    const bar = bars.find(b => b.id === barId);
+    return bar?.name || "Unknown";
+  };
+
   const filteredOrders = orders.filter((order) => {
     const matchesSearch =
       order.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -122,13 +137,14 @@ const OrderHistory = () => {
       order.order_type.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatus = statusFilter === "all" || order.status === statusFilter;
+    const matchesBar = barFilter === "all" || order.bar_id === barFilter;
 
     const orderDate = new Date(order.created_at);
     const matchesDateRange =
       (!startDate || orderDate >= startOfDay(startDate)) &&
       (!endDate || orderDate <= endOfDay(endDate));
 
-    return matchesSearch && matchesStatus && matchesDateRange;
+    return matchesSearch && matchesStatus && matchesBar && matchesDateRange;
   });
 
   const clearDateFilters = () => {
@@ -141,9 +157,11 @@ const OrderHistory = () => {
     setShowReceiptDialog(true);
   };
 
-  const handlePrint = () => {
+  const handlePrint = (copyType: "customer" | "office") => {
     const printContent = receiptRef.current;
     if (!printContent || !selectedOrder) return;
+
+    const barName = getBarName(selectedOrder.bar_id);
 
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
@@ -175,6 +193,14 @@ const OrderHistory = () => {
             .border-solid { border-top: 1px solid #333; }
             .gray { color: #666; }
             .pl-4 { padding-left: 16px; }
+            .copy-banner { 
+              text-align: center; 
+              font-weight: bold; 
+              margin-bottom: 10px;
+              padding: 5px;
+              border: 1px solid #333;
+              background: ${copyType === "office" ? "#f0f0f0" : "#fff"};
+            }
             .reprint-notice { 
               text-align: center; 
               font-weight: bold; 
@@ -189,7 +215,11 @@ const OrderHistory = () => {
         </head>
         <body>
           <div class="reprint-notice">*** REPRINT ***</div>
-          ${printContent.innerHTML}
+          <div class="copy-banner">${copyType.toUpperCase()} COPY</div>
+          ${printContent.innerHTML.replace("CUSTOMER COPY", `${copyType.toUpperCase()} COPY`)}
+          <div style="margin-top: 10px; text-align: center; font-size: 10px;">
+            <strong>Bar: ${barName}</strong>
+          </div>
         </body>
       </html>
     `);
@@ -243,6 +273,22 @@ const OrderHistory = () => {
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
+              {isAdmin && (
+                <Select value={barFilter} onValueChange={setBarFilter}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                    <Store className="mr-2 h-4 w-4" />
+                    <SelectValue placeholder="Filter by bar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Bars</SelectItem>
+                    {bars.map((bar) => (
+                      <SelectItem key={bar.id} value={bar.id}>
+                        {bar.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             
             {/* Date Range Filters */}
@@ -341,6 +387,7 @@ const OrderHistory = () => {
                     <TableHead>Order #</TableHead>
                     <TableHead>Date & Time</TableHead>
                     <TableHead>Type</TableHead>
+                    {isAdmin && <TableHead>Bar</TableHead>}
                     <TableHead>Table</TableHead>
                     <TableHead>Items</TableHead>
                     <TableHead>Total</TableHead>
@@ -365,6 +412,13 @@ const OrderHistory = () => {
                       <TableCell>
                         {orderTypeLabels[order.order_type] || order.order_type}
                       </TableCell>
+                      {isAdmin && (
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {getBarName(order.bar_id)}
+                          </Badge>
+                        </TableCell>
+                      )}
                       <TableCell>{order.table_number || "-"}</TableCell>
                       <TableCell>{order.order_items?.length || 0}</TableCell>
                       <TableCell className="font-medium">
@@ -388,17 +442,19 @@ const OrderHistory = () => {
                             <Eye className="h-4 w-4 mr-1" />
                             View
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedOrder(order);
-                              setShowReceiptDialog(true);
-                            }}
-                          >
-                            <Printer className="h-4 w-4 mr-1" />
-                            Reprint
-                          </Button>
+                          {isAdmin && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedOrder(order);
+                                setShowReceiptDialog(true);
+                              }}
+                            >
+                              <Printer className="h-4 w-4 mr-1" />
+                              Reprint
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -428,6 +484,11 @@ const OrderHistory = () => {
                   className="bg-white text-black p-6 w-[300px] font-mono text-sm"
                   style={{ fontFamily: "'Courier New', Courier, monospace" }}
                 >
+                  {/* Copy Banner */}
+                  <div className="text-center mb-2 py-1 border border-gray-400 font-bold text-xs">
+                    CUSTOMER COPY
+                  </div>
+
                   {/* Header */}
                   <div className="text-center mb-4">
                     <h1 className="text-xl font-bold">CHERRY DINING</h1>
@@ -470,6 +531,10 @@ const OrderHistory = () => {
                         <span>{selectedOrder.table_number}</span>
                       </div>
                     )}
+                    <div className="flex justify-between">
+                      <span>Bar:</span>
+                      <span className="font-bold">{getBarName(selectedOrder.bar_id)}</span>
+                    </div>
                   </div>
 
                   <div className="border-t border-dashed border-gray-400 my-3" />
@@ -517,21 +582,17 @@ const OrderHistory = () => {
                   {/* Payment */}
                   <div className="text-xs">
                     <div className="flex justify-between">
-                      <span>Payment Method:</span>
+                      <span>Payment:</span>
                       <span className="font-bold">
-                        {paymentLabels[selectedOrder.payments?.[0]?.payment_method] ||
-                          selectedOrder.payments?.[0]?.payment_method ||
-                          "N/A"}
+                        {selectedOrder.payments?.[0]
+                          ? paymentLabels[selectedOrder.payments[0].payment_method] ||
+                            selectedOrder.payments[0].payment_method
+                          : "N/A"}
                       </span>
                     </div>
                     <div className="flex justify-between mt-1">
                       <span>Status:</span>
-                      <span className="font-bold">
-                        {selectedOrder.status === "completed" ||
-                        selectedOrder.payments?.length > 0
-                          ? "PAID"
-                          : "UNPAID"}
-                      </span>
+                      <span className="font-bold">{selectedOrder.status.toUpperCase()}</span>
                     </div>
                   </div>
 
@@ -541,28 +602,24 @@ const OrderHistory = () => {
                   <div className="text-center text-xs space-y-2">
                     <p className="font-bold">Thank you for dining with us!</p>
                     <p>We hope to see you again soon.</p>
-                    <p className="text-[10px] text-gray-500 mt-4">
-                      This receipt serves as proof of payment
-                    </p>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setShowReceiptDialog(false)}
-              >
-                Close
-              </Button>
-              <Button className="flex-1" onClick={handlePrint}>
-                <Printer className="h-4 w-4 mr-2" />
-                Reprint Receipt
-              </Button>
-            </div>
+            {/* Print Buttons */}
+            {isAdmin && (
+              <div className="flex gap-2 justify-center">
+                <Button variant="outline" onClick={() => handlePrint("customer")}>
+                  <Printer className="h-4 w-4 mr-2" />
+                  Print Customer Copy
+                </Button>
+                <Button variant="default" onClick={() => handlePrint("office")}>
+                  <Printer className="h-4 w-4 mr-2" />
+                  Print Office Copy
+                </Button>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

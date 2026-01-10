@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { format, startOfDay, endOfDay } from "date-fns";
-import { CalendarIcon, Receipt, Users, CreditCard, Banknote, Smartphone, Building } from "lucide-react";
+import { CalendarIcon, Receipt, Users, CreditCard, Banknote, Smartphone, Building, Store, FileDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +30,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useBars } from "@/hooks/useBars";
+import { exportToPDF, exportToExcel } from "@/lib/exportUtils";
 
 const formatPrice = (price: number) => {
   return new Intl.NumberFormat("en-NG", {
@@ -60,6 +62,7 @@ interface OrderWithDetails {
   total_amount: number;
   created_at: string;
   created_by: string | null;
+  bar_id: string | null;
   order_items: { item_name: string; quantity: number; total_price: number }[];
   payments: { payment_method: string; amount: number }[];
 }
@@ -74,8 +77,11 @@ const EODReport = () => {
   const { user, role } = useAuth();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedCashier, setSelectedCashier] = useState<string>("all");
+  const [selectedBar, setSelectedBar] = useState<string>("all");
   
   const isManager = role === "super_admin" || role === "manager";
+
+  const { data: bars = [] } = useBars();
 
   // Fetch all cashiers (for managers)
   const { data: cashiers = [] } = useQuery({
@@ -92,7 +98,7 @@ const EODReport = () => {
 
   // Fetch orders for the selected date
   const { data: orders = [], isLoading } = useQuery({
-    queryKey: ["eod-orders", selectedDate, selectedCashier],
+    queryKey: ["eod-orders", selectedDate, selectedCashier, selectedBar],
     queryFn: async () => {
       const start = startOfDay(selectedDate).toISOString();
       const end = endOfDay(selectedDate).toISOString();
@@ -100,7 +106,7 @@ const EODReport = () => {
       let query = supabase
         .from("orders")
         .select(`
-          id, order_number, order_type, total_amount, created_at, created_by,
+          id, order_number, order_type, total_amount, created_at, created_by, bar_id,
           order_items(item_name, quantity, total_price),
           payments(payment_method, amount)
         `)
@@ -115,6 +121,11 @@ const EODReport = () => {
       } else if (!isManager) {
         // Non-managers can only see their own
         query = query.eq("created_by", user?.id);
+      }
+
+      // Filter by bar
+      if (selectedBar !== "all") {
+        query = query.eq("bar_id", selectedBar);
       }
 
       const { data, error } = await query;
@@ -137,12 +148,52 @@ const EODReport = () => {
       (sum, o) => sum + o.order_items.reduce((s, i) => s + i.quantity, 0),
       0
     ),
+    barBreakdown: orders.reduce((acc, order) => {
+      const barId = order.bar_id || "no-bar";
+      acc[barId] = (acc[barId] || 0) + order.total_amount;
+      return acc;
+    }, {} as Record<string, number>),
   };
 
   const getCashierName = (id: string | null) => {
     if (!id) return "Unknown";
     const cashier = cashiers.find((c) => c.id === id);
     return cashier?.full_name || cashier?.email || "Unknown";
+  };
+
+  const getBarName = (barId: string | null) => {
+    if (!barId || barId === "no-bar") return "N/A";
+    const bar = bars.find(b => b.id === barId);
+    return bar?.name || "Unknown";
+  };
+
+  const handleExportPDF = () => {
+    const headers = ["Order #", "Time", "Type", "Bar", "Items", "Payment", "Amount"];
+    const data = orders.map(order => [
+      order.order_number,
+      format(new Date(order.created_at), "HH:mm"),
+      order.order_type.replace("_", " "),
+      getBarName(order.bar_id),
+      order.order_items.length.toString(),
+      order.payments.map(p => paymentLabels[p.payment_method] || p.payment_method).join(", "),
+      formatPrice(order.total_amount),
+    ]);
+    exportToPDF(`EOD Report - ${format(selectedDate, "dd MMM yyyy")}`, headers, data);
+  };
+
+  const handleExportExcel = () => {
+    const headers = ["Order #", "Time", "Type", "Bar", "Items", "Payment", "Cashier", "Amount"];
+    const data = orders.map(order => [
+      order.order_number,
+      format(new Date(order.created_at), "HH:mm"),
+      order.order_type.replace("_", " "),
+      getBarName(order.bar_id),
+      order.order_items.length,
+      order.payments.map(p => paymentLabels[p.payment_method] || p.payment_method).join(", "),
+      getCashierName(order.created_by),
+      order.total_amount,
+    ]);
+    exportToExcel(`EOD_Report_${format(selectedDate, "yyyy-MM-dd")}`, headers, data);
   };
 
   return (
@@ -162,6 +213,16 @@ const EODReport = () => {
         </div>
 
         <div className="flex flex-wrap gap-3">
+          {/* Export Buttons */}
+          <Button variant="outline" size="sm" onClick={handleExportPDF}>
+            <FileDown className="h-4 w-4 mr-2" />
+            PDF
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExportExcel}>
+            <FileDown className="h-4 w-4 mr-2" />
+            Excel
+          </Button>
+
           {/* Date Picker */}
           <Popover>
             <PopoverTrigger asChild>
@@ -186,6 +247,24 @@ const EODReport = () => {
               />
             </PopoverContent>
           </Popover>
+
+          {/* Bar Filter (managers only) */}
+          {isManager && (
+            <Select value={selectedBar} onValueChange={setSelectedBar}>
+              <SelectTrigger className="w-[180px]">
+                <Store className="mr-2 h-4 w-4" />
+                <SelectValue placeholder="All Bars" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Bars</SelectItem>
+                {bars.map((bar) => (
+                  <SelectItem key={bar.id} value={bar.id}>
+                    {bar.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           {/* Cashier Filter (managers only) */}
           {isManager && (
@@ -276,6 +355,38 @@ const EODReport = () => {
         </Card>
       </div>
 
+      {/* Bar Breakdown (for managers) */}
+      {isManager && Object.keys(summary.barBreakdown).length > 0 && (
+        <Card className="bg-card border-border">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Store className="h-5 w-5" />
+              Sales by Bar
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-4">
+              {Object.entries(summary.barBreakdown).map(([barId, amount]) => (
+                <div
+                  key={barId}
+                  className="flex items-center gap-3 p-4 rounded-lg border border-border bg-muted/30"
+                >
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Store className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      {getBarName(barId)}
+                    </p>
+                    <p className="font-bold">{formatPrice(amount)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Payment Breakdown */}
       <Card className="bg-card border-border">
         <CardHeader>
@@ -342,6 +453,7 @@ const EODReport = () => {
                     <TableHead>Order #</TableHead>
                     <TableHead>Time</TableHead>
                     <TableHead>Type</TableHead>
+                    {isManager && <TableHead>Bar</TableHead>}
                     <TableHead>Items</TableHead>
                     <TableHead>Payment</TableHead>
                     {isManager && <TableHead>Cashier</TableHead>}
@@ -362,6 +474,13 @@ const EODReport = () => {
                           {order.order_type.replace("_", " ")}
                         </Badge>
                       </TableCell>
+                      {isManager && (
+                        <TableCell>
+                          <Badge variant="secondary" className="text-xs">
+                            {getBarName(order.bar_id)}
+                          </Badge>
+                        </TableCell>
+                      )}
                       <TableCell>
                         <div className="max-w-[200px]">
                           {order.order_items.slice(0, 2).map((item, i) => (
