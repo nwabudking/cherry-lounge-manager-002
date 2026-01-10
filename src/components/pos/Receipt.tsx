@@ -11,6 +11,8 @@ interface ReceiptProps {
   total: number;
   paymentMethod: string;
   cashierName?: string;
+  barName?: string;
+  copyType?: "customer" | "office";
 }
 
 const orderTypeLabels: Record<string, string> = {
@@ -38,6 +40,8 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
       total,
       paymentMethod,
       cashierName,
+      barName,
+      copyType = "customer",
     },
     ref
   ) => {
@@ -49,6 +53,11 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
         className="bg-white text-black p-6 w-[300px] font-mono text-sm print:w-full print:max-w-[80mm]"
         style={{ fontFamily: "'Courier New', Courier, monospace" }}
       >
+        {/* Copy Type Banner */}
+        <div className="text-center mb-2 py-1 bg-gray-100 font-bold text-xs uppercase border border-gray-300">
+          {copyType === "customer" ? "CUSTOMER COPY" : "OFFICE COPY"}
+        </div>
+
         {/* Header */}
         <div className="text-center mb-4">
           <h1 className="text-xl font-bold">CHERRY DINING</h1>
@@ -82,6 +91,12 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
             <div className="flex justify-between">
               <span>Table:</span>
               <span>{tableNumber}</span>
+            </div>
+          )}
+          {barName && (
+            <div className="flex justify-between">
+              <span>Bar:</span>
+              <span className="font-bold">{barName}</span>
             </div>
           )}
           {cashierName && (
