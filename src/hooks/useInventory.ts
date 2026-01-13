@@ -87,6 +87,17 @@ export function useCreateInventoryItem() {
   
   return useMutation({
     mutationFn: async (data: TablesInsert<'inventory_items'>) => {
+      // Check if item with same name already exists
+      const { data: existing } = await supabase
+        .from('inventory_items')
+        .select('id')
+        .ilike('name', data.name)
+        .maybeSingle();
+      
+      if (existing) {
+        throw new Error(`An item with the name "${data.name}" already exists`);
+      }
+      
       const { data: result, error } = await supabase
         .from('inventory_items')
         .insert(data)
@@ -175,7 +186,19 @@ export function useAddStock() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ itemId, quantity, notes }: { itemId: string; quantity: number; notes?: string }) => {
+    mutationFn: async ({ 
+      itemId, 
+      quantity, 
+      notes, 
+      costPrice, 
+      sellingPrice 
+    }: { 
+      itemId: string; 
+      quantity: number; 
+      notes?: string;
+      costPrice?: number;
+      sellingPrice?: number;
+    }) => {
       // Get current stock
       const { data: item, error: fetchError } = await supabase
         .from('inventory_items')
@@ -191,10 +214,17 @@ export function useAddStock() {
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       
+      // Build update object - include prices if provided
+      const updateData: { current_stock: number; cost_per_unit?: number; selling_price?: number } = { 
+        current_stock: newStock 
+      };
+      if (costPrice !== undefined) updateData.cost_per_unit = costPrice;
+      if (sellingPrice !== undefined) updateData.selling_price = sellingPrice;
+      
       // Update inventory
       const { error: updateError } = await supabase
         .from('inventory_items')
-        .update({ current_stock: newStock })
+        .update(updateData)
         .eq('id', itemId);
       
       if (updateError) throw updateError;
@@ -217,6 +247,7 @@ export function useAddStock() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: inventoryKeys.items() });
       queryClient.invalidateQueries({ queryKey: inventoryKeys.movements() });
+      queryClient.invalidateQueries({ queryKey: ['menu'] });
       toast.success('Stock added successfully');
     },
     onError: (error: Error) => {

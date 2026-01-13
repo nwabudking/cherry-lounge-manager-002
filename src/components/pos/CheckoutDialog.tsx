@@ -61,6 +61,7 @@ export const CheckoutDialog = ({
 }: CheckoutDialogProps) => {
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [hasPrinted, setHasPrinted] = useState(false);
+  const [autoPrintDone, setAutoPrintDone] = useState(false);
   const receiptRef = useRef<HTMLDivElement>(null);
 
   const handleConfirm = () => {
@@ -68,6 +69,23 @@ export const CheckoutDialog = ({
       onConfirmPayment(selectedMethod);
     }
   };
+
+  // Auto-print receipts immediately after payment for cashiers (non-reprint users)
+  const handleAutoPrint = () => {
+    if (!canReprint && !autoPrintDone && completedOrder) {
+      // Small delay to ensure receipt is rendered
+      setTimeout(() => {
+        handlePrintBothImmediate();
+        setAutoPrintDone(true);
+        setHasPrinted(true);
+      }, 300);
+    }
+  };
+
+  // Trigger auto-print when order completes
+  if (completedOrder && !autoPrintDone && !canReprint) {
+    handleAutoPrint();
+  }
 
   const handlePrint = (copyType: "customer" | "office") => {
     const printContent = receiptRef.current;
@@ -134,14 +152,21 @@ export const CheckoutDialog = ({
   };
 
   const handlePrintBoth = () => {
+    if (!canReprint && hasPrinted) return; // Prevent re-printing for cashiers
     handlePrint("customer");
     setTimeout(() => handlePrint("office"), 500);
     setHasPrinted(true);
   };
 
+  const handlePrintBothImmediate = () => {
+    handlePrint("customer");
+    setTimeout(() => handlePrint("office"), 500);
+  };
+
   const handleClose = () => {
     setSelectedMethod(null);
     setHasPrinted(false);
+    setAutoPrintDone(false);
     onClose();
   };
 

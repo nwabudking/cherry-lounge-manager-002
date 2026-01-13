@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCashierAssignment } from "@/hooks/useCashierAssignment";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { Search, Printer, Eye, History, CalendarIcon, X, Store } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -92,8 +93,9 @@ interface Order {
 }
 
 const OrderHistory = () => {
-  const { role } = useAuth();
+  const { user, role } = useAuth();
   const isAdmin = role === "super_admin" || role === "manager";
+  const isCashier = role === "cashier";
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -105,11 +107,14 @@ const OrderHistory = () => {
   const receiptRef = useRef<HTMLDivElement>(null);
 
   const { data: bars = [] } = useBars();
+  
+  // Get cashier's bar assignment
+  const { data: cashierAssignment } = useCashierAssignment(user?.id || "");
 
   const { data: orders = [], isLoading } = useQuery({
-    queryKey: ["order-history"],
+    queryKey: ["order-history", cashierAssignment?.bar_id, isCashier],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("orders")
         .select(`
           *,
@@ -118,7 +123,13 @@ const OrderHistory = () => {
         `)
         .order("created_at", { ascending: false })
         .limit(500);
+      
+      // Filter by cashier's assigned bar if they are a cashier
+      if (isCashier && cashierAssignment?.bar_id) {
+        query = query.eq("bar_id", cashierAssignment.bar_id);
+      }
 
+      const { data, error } = await query;
       if (error) throw error;
       return data as Order[];
     },
