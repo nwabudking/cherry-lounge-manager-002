@@ -272,13 +272,15 @@ const StorePage = () => {
   const handleStockMovementSubmit = (
     type: MovementType,
     quantity: number,
-    notes?: string
+    notes?: string,
+    costPrice?: number,
+    sellingPrice?: number
   ) => {
     if (!movementItem) return;
 
     if (type === "in") {
       addStockMutation.mutate(
-        { itemId: movementItem.id, quantity, notes },
+        { itemId: movementItem.id, quantity, notes, costPrice, sellingPrice },
         {
           onSuccess: () => {
             setIsMovementDialogOpen(false);

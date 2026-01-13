@@ -31,6 +31,7 @@ import {
   FileText,
   Warehouse,
   Store,
+  Package,
 } from 'lucide-react';
 
 interface NavItem {
@@ -51,6 +52,7 @@ const mainNavItems: NavItem[] = [
 const operationsNavItems: NavItem[] = [
   { title: 'Bar', url: '/bar', icon: Wine, roles: ['super_admin', 'manager', 'bar_staff', 'cashier'] },
   { title: 'Kitchen', url: '/kitchen', icon: ChefHat, roles: ['super_admin', 'manager', 'kitchen_staff'] },
+  { title: 'Bar Inventory', url: '/bar-inventory', icon: Package, roles: ['cashier'] },
 ];
 
 const storeNavItems: NavItem[] = [

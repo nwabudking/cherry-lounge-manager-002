@@ -44,6 +44,7 @@ export const InventoryItemDialog = ({
     current_stock: 0,
     min_stock_level: 10,
     cost_per_unit: 0,
+    selling_price: 0,
     supplier: "",
     supplier_id: "",
   });
@@ -57,6 +58,7 @@ export const InventoryItemDialog = ({
         current_stock: item.current_stock,
         min_stock_level: item.min_stock_level,
         cost_per_unit: item.cost_per_unit || 0,
+        selling_price: item.selling_price || 0,
         supplier: item.supplier || "",
         supplier_id: item.supplier_id || "",
       });
@@ -68,6 +70,7 @@ export const InventoryItemDialog = ({
         current_stock: 0,
         min_stock_level: 10,
         cost_per_unit: 0,
+        selling_price: 0,
         supplier: "",
         supplier_id: "",
       });
@@ -85,6 +88,7 @@ export const InventoryItemDialog = ({
       current_stock: formData.current_stock,
       min_stock_level: formData.min_stock_level,
       cost_per_unit: formData.cost_per_unit || null,
+      selling_price: formData.selling_price || null,
       supplier: selectedSupplier?.name || formData.supplier || null,
       supplier_id: formData.supplier_id || null,
     });
@@ -159,7 +163,7 @@ export const InventoryItemDialog = ({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="cost">Cost per Unit (₦)</Label>
+              <Label htmlFor="cost">Cost Price (₦)</Label>
               <Input
                 id="cost"
                 type="number"
@@ -167,35 +171,44 @@ export const InventoryItemDialog = ({
                 onChange={(e) => setFormData({ ...formData, cost_per_unit: Number(e.target.value) })}
               />
             </div>
-
             <div className="space-y-2">
-              <Label>Supplier</Label>
-              {suppliers.length > 0 ? (
-                <Select
-                  value={formData.supplier_id}
-                  onValueChange={(value) => setFormData({ ...formData, supplier_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select supplier" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">None</SelectItem>
-                    {suppliers.map((supplier) => (
-                      <SelectItem key={supplier.id} value={supplier.id}>
-                        {supplier.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  id="supplier"
-                  value={formData.supplier}
-                  onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                  placeholder="Enter supplier name"
-                />
-              )}
+              <Label htmlFor="selling_price">Selling Price (₦)</Label>
+              <Input
+                id="selling_price"
+                type="number"
+                value={formData.selling_price}
+                onChange={(e) => setFormData({ ...formData, selling_price: Number(e.target.value) })}
+              />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Supplier</Label>
+            {suppliers.length > 0 ? (
+              <Select
+                value={formData.supplier_id}
+                onValueChange={(value) => setFormData({ ...formData, supplier_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select supplier" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {suppliers.map((supplier) => (
+                    <SelectItem key={supplier.id} value={supplier.id}>
+                      {supplier.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                id="supplier"
+                value={formData.supplier}
+                onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                placeholder="Enter supplier name"
+              />
+            )}
           </div>
 
           <div className="flex gap-2 justify-end pt-4">

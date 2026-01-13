@@ -9,6 +9,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Migration from "./pages/Migration";
 import EODReport from "./pages/EODReport";
+import BarInventory from "./pages/BarInventory";
 import { POS, Orders, OrderHistory, Tables, Menu, Bar, Kitchen, Inventory, Staff, Customers, Reports, SettingsPage, StorePage, BarsManagementPage } from "./pages/modules";
 import { BarProvider } from "@/contexts/BarContext";
 import NotFound from "./pages/NotFound";
@@ -45,6 +46,7 @@ const App = () => (
                 <Route path="/migration" element={<Migration />} />
                 <Route path="/store" element={<StorePage />} />
                 <Route path="/bars" element={<BarsManagementPage />} />
+                <Route path="/bar-inventory" element={<BarInventory />} />
               </Route>
               
               <Route path="*" element={<NotFound />} />
