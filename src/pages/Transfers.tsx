@@ -138,6 +138,9 @@ const TransfersPage = () => {
     }, {
       onSuccess: () => {
         setTransferDialogOpen(false);
+        setInventoryItemId("");
+        setQuantity(1);
+        setNotes("");
         refetchTransfers();
       },
     });
@@ -421,20 +424,20 @@ const TransfersPage = () => {
 
       {/* Transfer Dialog */}
       <Dialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="pb-2">
+            <DialogTitle className="flex items-center gap-2 text-lg">
               <ArrowRightLeft className="h-5 w-5" />
               {isAdmin ? "Transfer Items" : "Send Transfer"}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-sm">
               {isAdmin 
                 ? "Transfer inventory between bars immediately" 
-                : "Send items to another bar. Items will be deducted from your inventory immediately. The receiving bar must accept to add to their stock."}
+                : "Items are deducted from your bar immediately. Receiver must accept."}
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={(e) => { e.preventDefault(); handleCreateTransfer(); }} className="space-y-4">
+          <form onSubmit={(e) => { e.preventDefault(); handleCreateTransfer(); }} className="space-y-3">
             {/* Source Bar Selection (Admin only) */}
             {isAdmin && (
               <div className="space-y-2">
@@ -466,9 +469,9 @@ const TransfersPage = () => {
 
             {/* Cashier: Show assigned bar info */}
             {isCashier && (
-              <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
-                <Label className="text-sm text-muted-foreground">From Bar (Your Assignment)</Label>
-                <p className="font-semibold text-primary">{assignedBarName}</p>
+              <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">From:</span>
+                <span className="font-semibold text-primary">{assignedBarName}</span>
               </div>
             )}
 
@@ -529,23 +532,19 @@ const TransfersPage = () => {
 
             {/* Stock Info */}
             {selectedItem && (
-              <div className="p-3 rounded-lg bg-muted/50 text-sm">
-                <div className="flex justify-between items-center">
-                  <span>Available Stock:</span>
-                  <span className="font-bold text-lg">
-                    {selectedItem.current_stock} {selectedItem.inventory_item?.unit}
-                  </span>
-                </div>
-                {quantity > selectedItem.current_stock && (
-                  <p className="text-red-500 text-xs mt-1">
-                    ⚠️ Quantity exceeds available stock
-                  </p>
-                )}
+              <div className="p-2 rounded-lg bg-muted/50 text-sm flex items-center justify-between">
+                <span>Available:</span>
+                <span className="font-bold">
+                  {selectedItem.current_stock} {selectedItem.inventory_item?.unit}
+                  {quantity > selectedItem.current_stock && (
+                    <span className="text-red-500 ml-2">⚠️ Exceeds stock</span>
+                  )}
+                </span>
               </div>
             )}
 
             {/* Quantity Input */}
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label htmlFor="quantity">Quantity</Label>
               <Input 
                 id="quantity" 
@@ -559,7 +558,7 @@ const TransfersPage = () => {
             </div>
 
             {/* Notes */}
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label htmlFor="notes">Notes (Optional)</Label>
               <Textarea 
                 id="notes" 
@@ -567,21 +566,9 @@ const TransfersPage = () => {
                 onChange={(e) => setNotes(e.target.value)} 
                 placeholder="Reason for transfer..." 
                 rows={2} 
+                className="resize-none"
               />
             </div>
-
-            {/* Transfer Flow Info for Cashiers */}
-            {isCashier && (
-              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm">
-                <p className="font-medium text-amber-800">Transfer Flow:</p>
-                <ol className="list-decimal list-inside text-amber-700 mt-1 space-y-1">
-                  <li>Items are deducted from your bar immediately</li>
-                  <li>Request is sent to destination bar</li>
-                  <li>Their cashier accepts → items added to their stock</li>
-                  <li>If rejected → items are returned to your stock</li>
-                </ol>
-              </div>
-            )}
 
             <DialogFooter>
               <Button 
