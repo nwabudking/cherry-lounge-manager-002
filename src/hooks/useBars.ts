@@ -381,7 +381,7 @@ export function useCreateBarToBarTransfer() {
       // Get current stock at source bar
       const { data: sourceInventory, error: stockError } = await supabase
         .from('bar_inventory')
-        .select('current_stock')
+        .select('id, current_stock')
         .eq('bar_id', sourceBarId)
         .eq('inventory_item_id', inventoryItemId)
         .maybeSingle();
@@ -391,37 +391,47 @@ export function useCreateBarToBarTransfer() {
         throw new Error(`Insufficient stock at source bar. Available: ${sourceInventory?.current_stock || 0}`);
       }
       
+      const newStock = sourceInventory.current_stock - quantity;
+      
       // ALWAYS deduct from source bar immediately (both admin and cashier transfers)
       const { error: deductError } = await supabase
         .from('bar_inventory')
         .update({ 
-          current_stock: sourceInventory.current_stock - quantity,
+          current_stock: newStock,
           updated_at: new Date().toISOString()
         })
-        .eq('bar_id', sourceBarId)
-        .eq('inventory_item_id', inventoryItemId);
+        .eq('id', sourceInventory.id);
       
-      if (deductError) throw new Error('Failed to deduct from source inventory');
+      if (deductError) {
+        console.error('Deduct error:', deductError);
+        throw new Error('Failed to deduct from source inventory');
+      }
+      
+      console.log(`Deducted ${quantity} from source bar. New stock: ${newStock}`);
       
       if (isAdminTransfer) {
         // Admin: Complete transfer immediately - add to destination
         const { data: destInventory } = await supabase
           .from('bar_inventory')
-          .select('*')
+          .select('id, current_stock')
           .eq('bar_id', destinationBarId)
           .eq('inventory_item_id', inventoryItemId)
           .maybeSingle();
         
         if (destInventory) {
-          await supabase
+          const { error: updateDestError } = await supabase
             .from('bar_inventory')
             .update({ 
               current_stock: destInventory.current_stock + quantity,
               updated_at: new Date().toISOString()
             })
             .eq('id', destInventory.id);
+          
+          if (updateDestError) {
+            console.error('Update dest error:', updateDestError);
+          }
         } else {
-          await supabase
+          const { error: insertDestError } = await supabase
             .from('bar_inventory')
             .insert({
               bar_id: destinationBarId,
@@ -429,6 +439,10 @@ export function useCreateBarToBarTransfer() {
               current_stock: quantity,
               min_stock_level: 5,
             });
+          
+          if (insertDestError) {
+            console.error('Insert dest error:', insertDestError);
+          }
         }
         
         // Create completed transfer record
@@ -463,10 +477,17 @@ export function useCreateBarToBarTransfer() {
         
         if (error) throw error;
       }
+      
+      return { sourceBarId, destinationBarId };
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (result, variables) => {
+      // Invalidate all bar-related queries to refresh inventory
       queryClient.invalidateQueries({ queryKey: barsKeys.all });
+      queryClient.invalidateQueries({ queryKey: barsKeys.inventory(variables.sourceBarId) });
+      queryClient.invalidateQueries({ queryKey: barsKeys.inventory(variables.destinationBarId) });
+      queryClient.invalidateQueries({ queryKey: barsKeys.barToBarTransfers() });
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      
       toast.success(
         variables.isAdminTransfer 
           ? 'Transfer completed successfully' 
@@ -586,8 +607,11 @@ export function useRespondToTransfer() {
       }
     },
     onSuccess: (_, variables) => {
+      // Invalidate all bar-related queries
       queryClient.invalidateQueries({ queryKey: barsKeys.all });
+      queryClient.invalidateQueries({ queryKey: barsKeys.barToBarTransfers() });
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      
       toast.success(
         variables.response === 'accepted' 
           ? 'Transfer accepted! Items added to your inventory.' 
